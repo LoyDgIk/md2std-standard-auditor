@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "md2std-standard-auditor"
+version = "0.1.0"
+description = "Audit md2std Chinese standard Markdown before DOCX generation."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "LoyDgIk" }
+]
+dependencies = []
+
+[project.scripts]
+md2std-audit = "md2std_standard_auditor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["md2std_standard_auditor*"]
+
