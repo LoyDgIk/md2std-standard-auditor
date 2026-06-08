@@ -48,14 +48,79 @@ _ANCHOR_RE = re.compile(r"\{#([^}\s]+)\}")
 _ANCHOR_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
 _TABLE_CAPTION_RE = re.compile(r"^\s*\{\s*表\s*[:：]\s*#([^}\s]+)\s*\}\s+(.+?)\s*$")
 _TABLE_CAPTION_MARKER_RE = re.compile(r"^\s*(?:\{\s*)?表\s*[:：]")
+_FIGURE_CAPTION_RE = re.compile(r"^\s*\{\s*图\s*[:：]\s*#([^}\s]+)\s*\}\s+(.+?)\s*$")
+_FIGURE_CAPTION_MARKER_RE = re.compile(r"^\s*(?:\{\s*)?图\s*[:：]")
 _IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]*)\)")
 _INLINE_DISPLAY_FORMULA_RE = re.compile(r"\$\$(.+?)\$\$\s*(?:\{#([^}]+)\})?")
 _FORMULA_TAG_RE = re.compile(r"\\tag\s*\{?")
 _VISIBLE_TABLE_LABEL_RE = re.compile(r"^表\s*(?:[A-ZＡ-Ｚ]\s*[.．]\s*)?\d+(?:[.．]\d+)?(?:\s|　|$)")
 _VISIBLE_FIGURE_LABEL_RE = re.compile(r"^图\s*(?:[A-ZＡ-Ｚ]\s*[.．]\s*)?\d+(?:[.．]\d+)?(?:\s|　|$)")
-_NORMATIVE_REF_RE = re.compile(r"^\s*([A-Z][A-Z/]*\s+\d[\w.\-—–]*)(?:\s{2,}|　+)(.+)$")
+_NORMATIVE_REF_RE = re.compile(r"^\s*([A-Z][A-Z0-9/]*\s+\d[\w.\-—–]*)(?:\s{2,}|　+)(.+)$")
 _LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-+*]|\d+[.)])\s+")
 _REFERENCE_ITEM_RE = re.compile(r"^\s*[\[［]\d+[\]］]")
+_STANDARD_YEAR_HYPHEN_RE = re.compile(
+    r"\b([A-Z][A-Z0-9]*(?:/[A-Z0-9]+)*\s+\d[\w.]*)([-–])(\d{4})\b"
+)
+_STANDARD_CODE_RE = re.compile(r"^([A-Z][A-Z0-9]*(?:/[A-Z0-9]+)*)\s+(\d+(?:\.\d+)*)")
+_GBT_1_1_RE = re.compile(r"GB/T\s*1\.1(?:\s*[—-]\s*2020)?")
+_NOTE_LEAD_RE = re.compile(r"^\s*(?:\|\s*)?注(?:\d+)?[：:]")
+_MODAL_VERB_RE = re.compile(
+    r"不应|不宜|不必|不得|必须|应当|"
+    r"(?<![相适反响供])应(?!急|用|对|力|变|响|聘|邀|届|收|答|付|接|试|验|景)|"
+    r"(?<!适)宜"
+)
+_INDEX_GROUP_RE = re.compile(r"^[A-Z]$")
+_INDEX_ITEM_RE = re.compile(r"^\s*[-+*]\s+(.+?)[：:]\s*")
+_GENERIC_ADDON_RE = re.compile(r"^\s*\{\s*(单位|来源|脚注)\s*\}\s*(.*?)\s*$")
+_FIGURE_KEY_ITEM_RE = re.compile(r"^\s*\{\s*图标引\s*\}\s*(.*?)\s*$")
+_FIGURE_BODY_PARAGRAPH_RE = re.compile(r"^\s*\{\s*图段\s*\}\s*(.*?)\s*$")
+_SUBFIGURE_GROUP_RE = re.compile(r"^\s*\{\s*分图组\s*[:：]\s*(\d+)\s*\}\s*$")
+_TERM_MARKER_RE = re.compile(r"^\s*\{\s*术语\s*[:：]\s*(.+?)\s*\}\s*$")
+_UNTITLED_CLAUSE_RE = re.compile(r"^\s*\{\s*无标题条\s*[:：]\s*([2-6])\s*\}\s*(\S.*)$", re.S)
+_UNTITLED_MARKER_RE = re.compile(r"^\s*\{\s*无标题条\b")
+_EXAMPLE_RE = re.compile(r"^\s*示例\s*(\d+)?\s*[:：]")
+_EXAMPLE_END_RE = re.compile(r"^\s*\{\s*示例结束\s*\}\s*$")
+_BRACED_NOTE_RE = re.compile(r"^\s*\{\s*注\s*\d*\s*[:：].*?\}\s*$")
+_OLD_TABLE_CELL_FOOTNOTE_RE = re.compile(r"\{\s*脚注[A-Za-z]*\s*\}")
+_REMOVED_MARKERS = (
+    (re.compile(r"^\s*\{\s*表注\s*\d*\s*[:：].*?\}\s*$"), "表注语法已移除。", "把普通注写在被注释内容所在单元格内，例如 `段内容〔注：...〕`。"),
+    (re.compile(r"^\s*\{\s*图注\s*\d*\s*[:：].*?\}\s*$"), "图注语法已移除。", "图内段落普通注写成 `{图段} 段内容〔注：...〕`；正文注写成 `注：...`。"),
+    (re.compile(r"^\s*\{\s*表单位\s*[:：].*?\}\s*$"), "表单位语法已移除。", "图表单位统一写成紧跟表或图的 `{单位} ...`。"),
+    (re.compile(r"^\s*\{\s*图单位\s*[:：].*?\}\s*$"), "图单位语法已移除。", "图表单位统一写成紧跟表或图的 `{单位} ...`。"),
+    (re.compile(r"^\s*\{\s*表来源\s*[:：].*?\}\s*$"), "表来源语法已移除。", "图表来源统一写成紧跟表或图的 `{来源} ...`。"),
+    (re.compile(r"^\s*\{\s*图来源\s*[:：].*?\}\s*$"), "图来源语法已移除。", "图表来源统一写成紧跟表或图的 `{来源} ...`。"),
+    (re.compile(r"^\s*\{\s*表脚注\s*[A-Za-z]*\s*[:：].*?\}\s*$"), "表脚注旧语法已移除。", "表格脚注引用点写 `〔脚注〕`，脚注内容写成紧跟表的 `{脚注} ...`。"),
+    (re.compile(r"^\s*\{\s*图脚注\s*[A-Za-z]*\s*[:：].*?\}\s*$"), "图脚注旧语法已移除。", "图脚注内容写成紧跟图的 `{脚注} ...`。"),
+    (re.compile(r"^\s*\{\s*分图\s*[:：].*?\}\s*$"), "分图旧语法已移除。", "组合分图写成 `{图：#fig:id} 图题`、`{分图组:2}`，后接连续 Markdown 图片。"),
+    (re.compile(r"^\s*\{\s*分图组\s*[:：]\s*\d+\s*[|｜].*?\}\s*$"), "分图组内容不应写进标记内。", "写成独立 `{分图组:2}`，后面连续放置 Markdown 图片。"),
+    (re.compile(r"^\s*\{\s*图标引\s*[0-9A-Za-z]+\s*[:：].*?\}\s*$"), "图标引不再手写编号。", "写成 `{图标引} 说明的内容`，编号由生成器自动处理。"),
+    (re.compile(r"^\s*\{\s*图段\s*[:：].*?\}\s*$"), "图段旧语法已移除。", "写成 `{图段} 图内段落内容`，不要把内容写进 `{}`。"),
+)
+_PINYIN_INITIAL_RANGES = (
+    (-20319, -20284, "A"),
+    (-20283, -19776, "B"),
+    (-19775, -19219, "C"),
+    (-19218, -18711, "D"),
+    (-18710, -18527, "E"),
+    (-18526, -18240, "F"),
+    (-18239, -17923, "G"),
+    (-17922, -17418, "H"),
+    (-17417, -16475, "J"),
+    (-16474, -16213, "K"),
+    (-16212, -15641, "L"),
+    (-15640, -15166, "M"),
+    (-15165, -14923, "N"),
+    (-14922, -14915, "O"),
+    (-14914, -14631, "P"),
+    (-14630, -14150, "Q"),
+    (-14149, -14091, "R"),
+    (-14090, -13319, "S"),
+    (-13318, -12839, "T"),
+    (-12838, -12557, "W"),
+    (-12556, -11848, "X"),
+    (-11847, -11056, "Y"),
+    (-11055, -10247, "Z"),
+)
 
 _NORMATIVE_REF_LEAD = (
     "下列文件中的内容通过文中的规范性引用而构成本文件必不可少的条款。"
@@ -88,6 +153,7 @@ class _Auditor:
         self.anchors: dict[tuple[str, str], int] = {}
         self.normative_refs: set[str] = set()
         self.heading_entries: list[tuple[int, int, str]] = []
+        self.subfigure_image_lines: set[int] = set()
 
     def run(self) -> list[Issue]:
         self._check_front_matter()
@@ -95,7 +161,11 @@ class _Auditor:
         self._collect_normative_refs()
         self._check_document_structure()
         self._check_normative_reference_section()
+        self._check_normative_reference_order()
         self._check_reference_section()
+        self._check_index_section()
+        self._check_informative_appendix_modal_verbs()
+        self._check_md2std_block_markers()
         self._scan_lines()
         self._scan_references()
         self.issues.sort(key=lambda issue: (issue.line, SEVERITY_ORDER[issue.severity], issue.code))
@@ -198,7 +268,7 @@ class _Auditor:
                         "error",
                         line_no,
                         "附录中不应设置 `%s`。" % title,
-                        "GB/T 1.1-2020 规定附录中不准许设置范围、规范性引用文件、术语和定义等内容。",
+                        "GB/T 1.1—2020 规定附录中不准许设置范围、规范性引用文件、术语和定义等内容。",
                     )
 
     def _check_normative_reference_section(self):
@@ -215,7 +285,7 @@ class _Auditor:
                 "NORMATIVE_REFERENCES_LEAD_MISSING",
                 "warning",
                 non_empty[0][0] if non_empty else 1,
-                "规范性引用文件章有清单条目，但缺少 GB/T 1.1-2020 固定导语。",
+                "规范性引用文件章有清单条目，但缺少 GB/T 1.1—2020 固定导语。",
                 "在清单前加入“下列文件中的内容通过文中的规范性引用而构成本文件必不可少的条款……”导语。",
             )
         if not has_entries and not has_none_text:
@@ -257,41 +327,322 @@ class _Auditor:
                     "每个引用文件应作为独立段落，且不加序号。",
                 )
 
+    def _check_normative_reference_order(self):
+        section = self._section_lines("规范性引用文件")
+        entries: list[tuple[tuple[object, ...], int, str]] = []
+        for line_no, line in section:
+            match = _NORMATIVE_REF_RE.match(self._strip_list_marker(line))
+            if not match:
+                continue
+            code = match.group(1).strip()
+            entries.append((self._normative_ref_sort_key(code), line_no, code))
+        expected = sorted(entries, key=lambda item: item[0])
+        for actual, wanted in zip(entries, expected):
+            if actual[2] == wanted[2]:
+                continue
+            self._issue(
+                "NORMATIVE_REFERENCES_ORDER",
+                "warning",
+                actual[1],
+                "规范性引用文件清单顺序疑似不符合 GB/T 1.1 排列规则。",
+                "按标准类型排序；同类中国家标准、ISO、IEC 按顺序号，行业/地方/团体等先按代号再按顺序号。当前条目 `%s` 的位置应复核。"
+                % actual[2],
+            )
+            break
+
     def _check_reference_section(self):
         section = self._section_lines("参考文献")
         if not section:
             return
-        expected = 1
         for line_no, line in section:
             stripped = line.strip()
             if not stripped or _HEADING_RE.match(line):
                 continue
+            if _GBT_1_1_RE.search(stripped):
+                self._issue(
+                    "GBT_1_1_IN_REFERENCES",
+                    "warning",
+                    line_no,
+                    "参考文献中列出了 GB/T 1.1。",
+                    "GB/T 1.1 通常作为起草依据写入前言；仅在正文存在资料性引用时才宜保留在参考文献。",
+                )
             match = _REFERENCE_ITEM_RE.match(stripped)
-            if not match:
+            if match:
                 self._issue(
-                    "REFERENCE_ITEM_UNNUMBERED",
-                    "warning",
+                    "MANUAL_REFERENCE_NUMBER",
+                    "error",
                     line_no,
-                    "参考文献条目未使用方括号序号。",
-                    "参考文献宜写成 `[1] GB/T 1.1—2020 ...`。",
+                    "参考文献条目不应在 Markdown 中手写方括号序号。",
+                    "删除 `[1]`、`[2]` 等手写序号，只保留参考文献正文；编号由 md2std/Word 参考文献样式生成。",
                 )
+
+    def _check_index_section(self):
+        section = self._section_lines("索引")
+        if not section:
+            return
+        current_group = ""
+        previous_group = ""
+        for line_no, line in section:
+            heading = _HEADING_RE.match(line)
+            if heading:
+                title = heading.group(2).strip().upper()
+                if len(heading.group(1)) == 2 and _INDEX_GROUP_RE.match(title):
+                    if previous_group and title < previous_group:
+                        self._issue(
+                            "INDEX_GROUP_ORDER",
+                            "warning",
+                            line_no,
+                            "索引字母分组顺序疑似不符合字母顺序。",
+                            "按关键词汉语拼音首字母顺序排列索引分组。",
+                        )
+                    current_group = title
+                    previous_group = title
                 continue
-            number_text = re.search(r"\d+", match.group(0))
-            if number_text and int(number_text.group(0)) != expected:
+            if not current_group:
+                continue
+            item = _INDEX_ITEM_RE.match(line)
+            if not item:
+                continue
+            keyword = item.group(1).strip()
+            initial = self._keyword_initial(keyword)
+            if initial and initial != current_group:
                 self._issue(
-                    "REFERENCE_ITEM_ORDER",
+                    "INDEX_ITEM_GROUP_MISMATCH",
                     "warning",
                     line_no,
-                    "参考文献序号不是连续顺序，期望 [%d]。" % expected,
-                    "按出现顺序从 `[1]` 开始连续编号。",
+                    "索引项 `%s` 归入 `%s` 组，按拼音首字母疑似应归入 `%s` 组。"
+                    % (keyword, current_group, initial),
+                    "按关键词汉语拼音字母顺序编排索引项，并将条目移入对应字母分组。",
                 )
-            expected += 1
+
+    def _check_informative_appendix_modal_verbs(self):
+        in_informative_appendix = False
+        for line_no, line in enumerate(self.lines, start=1):
+            heading = _HEADING_RE.match(line)
+            if heading and len(heading.group(1)) == 1:
+                title = heading.group(2).strip()
+                in_informative_appendix = self._is_appendix_heading(title) and "资料性" in title
+                continue
+            if not in_informative_appendix:
+                continue
+            if self._line_has_modal_verb(line):
+                self._issue(
+                    "INFORMATIVE_APPENDIX_MODAL_VERB",
+                    "warning",
+                    line_no,
+                    "资料性附录中疑似出现要求、推荐或禁止类能愿动词。",
+                    "资料性附录宜只给出有助于理解或使用文件的附加信息；改为陈述，或复核附录性质。",
+                )
+
+    def _check_md2std_block_markers(self):
+        last_target = ""
+        target_addons: set[str] = set()
+        pending_table_caption = False
+        in_html_table = False
+        in_example_block = False
+        subfigure_group_open = False
+        subfigure_count = 0
+
+        def reset_target():
+            nonlocal last_target, target_addons, pending_table_caption, subfigure_group_open, subfigure_count
+            last_target = ""
+            target_addons = set()
+            pending_table_caption = False
+            subfigure_group_open = False
+            subfigure_count = 0
+
+        for line_no, line in enumerate(self.lines, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            for pattern, message, hint in _REMOVED_MARKERS:
+                if pattern.match(line):
+                    self._issue("REMOVED_MD2STD_MARKER", "error", line_no, message, hint)
+                    reset_target()
+                    break
+            else:
+                pass
+            if any(pattern.match(line) for pattern, _, _ in _REMOVED_MARKERS):
+                continue
+
+            if _BRACED_NOTE_RE.match(line):
+                self._issue(
+                    "BRACED_NOTE",
+                    "error",
+                    line_no,
+                    "正文注不应写进 `{注：...}`。",
+                    "正文普通注写成 `注：...`；表格单元格内普通注写成 `段内容〔注：...〕`。",
+                )
+                reset_target()
+                continue
+
+            if _UNTITLED_MARKER_RE.match(line) and not _UNTITLED_CLAUSE_RE.match(line):
+                self._issue(
+                    "INVALID_UNTITLED_CLAUSE",
+                    "error",
+                    line_no,
+                    "无标题条语法不符合 md2std 契约。",
+                    "写成 `{无标题条:2} 正文`、`{无标题条:3} 正文` 或 `{无标题条:4} 正文`。",
+                )
+                reset_target()
+                continue
+
+            if _EXAMPLE_END_RE.match(line):
+                if not in_example_block:
+                    self._issue(
+                        "EXAMPLE_END_WITHOUT_START",
+                        "error",
+                        line_no,
+                        "`{示例结束}` 没有对应的 `示例：`。",
+                        "仅在多块示例中使用 `{示例结束}`，并确保前面存在 `示例：`。",
+                    )
+                in_example_block = False
+                reset_target()
+                continue
+            if _EXAMPLE_RE.match(line):
+                if in_example_block:
+                    self._issue(
+                        "NESTED_EXAMPLE_BLOCK",
+                        "error",
+                        line_no,
+                        "示例块疑似嵌套。",
+                        "先用 `{示例结束}` 结束当前多块示例，再开始新的示例。",
+                    )
+                in_example_block = True
+                reset_target()
+                continue
+
+            if _TERM_MARKER_RE.match(line):
+                reset_target()
+                continue
+
+            if _TABLE_CAPTION_RE.match(line):
+                pending_table_caption = True
+                last_target = ""
+                target_addons = set()
+                subfigure_group_open = False
+                continue
+
+            if self._is_table_start(line) and _OLD_TABLE_CELL_FOOTNOTE_RE.search(line):
+                self._issue(
+                    "OLD_TABLE_CELL_FOOTNOTE_REF",
+                    "error",
+                    line_no,
+                    "表格单元格内脚注引用不应使用 `{脚注}` 或 `{脚注a}`。",
+                    "表格单元格中的脚注引用点写成 `〔脚注〕`，脚注内容写成表后的 `{脚注} ...`。",
+                )
+
+            if pending_table_caption and self._is_table_start(line):
+                last_target = "table"
+                target_addons = set()
+                pending_table_caption = False
+                in_html_table = stripped.lower().startswith("<table") and "</table>" not in stripped.lower()
+                continue
+            if in_html_table:
+                if "</table>" in stripped.lower():
+                    in_html_table = False
+                    last_target = "table"
+                continue
+            if last_target == "table" and self._is_table_start(line):
+                continue
+
+            if _FIGURE_CAPTION_RE.match(line) or _IMAGE_RE.search(line):
+                if subfigure_group_open and _IMAGE_RE.search(line) and not _ANCHOR_RE.search(line):
+                    self.subfigure_image_lines.add(line_no)
+                    subfigure_count += 1
+                    continue
+                last_target = "figure"
+                target_addons = set()
+                subfigure_group_open = False
+                subfigure_count = 0
+                continue
+
+            generic_addon = _GENERIC_ADDON_RE.match(line)
+            if generic_addon:
+                addon_name = generic_addon.group(1)
+                if last_target not in {"table", "figure"}:
+                    self._issue(
+                        "ADDON_WITHOUT_TARGET",
+                        "error",
+                        line_no,
+                        "`{%s}` 必须紧跟表格或图片。" % addon_name,
+                        "将 `{%s} ...` 移到目标表或图之后，中间不要插入正文段落。" % addon_name,
+                    )
+                elif addon_name in {"单位", "来源"}:
+                    if addon_name in target_addons:
+                        self._issue(
+                            "DUPLICATE_ADDON",
+                            "error",
+                            line_no,
+                            "`{%s}` 在同一个图表目标后重复出现。" % addon_name,
+                            "同一个表或图的 `{%s}` 只能写一次。" % addon_name,
+                        )
+                    target_addons.add(addon_name)
+                subfigure_group_open = False
+                continue
+
+            if _FIGURE_KEY_ITEM_RE.match(line) or _FIGURE_BODY_PARAGRAPH_RE.match(line):
+                marker = "图标引" if _FIGURE_KEY_ITEM_RE.match(line) else "图段"
+                if last_target != "figure":
+                    self._issue(
+                        "FIGURE_ADDON_WITHOUT_FIGURE",
+                        "error",
+                        line_no,
+                        "`{%s}` 必须紧跟图片。" % marker,
+                        "仅图附加项可使用 `{%s} ...`；表格或正文后不要使用该标记。" % marker,
+                    )
+                subfigure_group_open = False
+                continue
+
+            subfigure_group = _SUBFIGURE_GROUP_RE.match(line)
+            if subfigure_group:
+                columns = int(subfigure_group.group(1))
+                if last_target != "figure":
+                    self._issue(
+                        "FIGURE_ADDON_WITHOUT_FIGURE",
+                        "error",
+                        line_no,
+                        "`{分图组:n}` 必须紧跟图片。",
+                        "先写 `{图：#fig:id} 图题` 或普通图片，再写 `{分图组:2}`。",
+                    )
+                if not 1 <= columns <= 6:
+                    self._issue(
+                        "INVALID_SUBFIGURE_GROUP",
+                        "error",
+                        line_no,
+                        "分图组并排数量应为 1 到 6。",
+                        "写成 `{分图组:2}` 这类有效列数。",
+                    )
+                if subfigure_group_open:
+                    self._issue(
+                        "DUPLICATE_SUBFIGURE_GROUP",
+                        "error",
+                        line_no,
+                        "`{分图组:n}` 在同一组合图后重复出现。",
+                        "每个组合图只写一次 `{分图组:n}`。",
+                    )
+                subfigure_group_open = last_target == "figure"
+                subfigure_count = 0
+                continue
+
+            if subfigure_group_open and subfigure_count == 0:
+                self._issue(
+                    "EMPTY_SUBFIGURE_GROUP",
+                    "error",
+                    line_no,
+                    "`{分图组:n}` 后至少应紧跟一张 Markdown 图片。",
+                    "在 `{分图组:n}` 后连续放置 `![分图题](图片路径)`。",
+                )
+            if not self._is_table_start(line):
+                reset_target()
 
     def _scan_lines(self):
         for line_no, line in enumerate(self.lines, start=1):
             self._check_heading(line_no, line)
             self._check_table_caption(line_no, line)
             self._check_table_without_caption(line_no, line)
+            self._check_figure_caption(line_no, line)
             self._check_images(line_no, line)
             self._check_formulas(line_no, line)
             self._check_list_nesting(line_no, line)
@@ -304,6 +655,32 @@ class _Auditor:
                     "旧交叉引用语法 `{@...}` 已废弃。",
                     "改用 `{{tbl:id}}`、`{{fig:id}}`、`{{eq:id}}` 或 `{{std:标准号}}`。",
                 )
+            self._check_standard_year_separator(line_no, line)
+            self._check_note_modal_verb(line_no, line)
+
+    def _check_standard_year_separator(self, line_no: int, line: str):
+        for match in _STANDARD_YEAR_HYPHEN_RE.finditer(line):
+            self._issue(
+                "STANDARD_YEAR_SEPARATOR",
+                "warning",
+                line_no,
+                "标准编号 `%s%s%s` 中年份连接号疑似使用了 `%s`。"
+                % (match.group(1), match.group(2), match.group(3), match.group(2)),
+                "顺序号与年份号之间应使用一字线连接号 `—`，例如 `GB/T 1.1—2020`。",
+            )
+
+    def _check_note_modal_verb(self, line_no: int, line: str):
+        if not _NOTE_LEAD_RE.match(line):
+            return
+        if not self._line_has_modal_verb(line):
+            return
+        self._issue(
+            "NOTE_MODAL_VERB",
+            "warning",
+            line_no,
+            "注中疑似出现要求、推荐或禁止类能愿动词。",
+            "除图表脚注外，注属于附加信息，宜改为事实陈述；如需规定要求，应移入条款或表中段。",
+        )
 
     def _check_heading(self, line_no: int, line: str):
         match = _HEADING_RE.match(line)
@@ -376,10 +753,45 @@ class _Auditor:
                 "在表格前添加 `{表：#tbl:id} 表题`，让 md2std 自动生成表号。",
             )
 
+    def _check_figure_caption(self, line_no: int, line: str):
+        match = _FIGURE_CAPTION_RE.match(line)
+        if not match:
+            if _FIGURE_CAPTION_MARKER_RE.match(line):
+                self._issue(
+                    "INVALID_FIGURE_CAPTION",
+                    "error",
+                    line_no,
+                    "图题标记格式不符合 md2std 契约。",
+                    "组合图题应写成 `{图：#fig:id} 标题`，标题中不要写图号。",
+                )
+            return
+        local_id = self._parse_typed_anchor(match.group(1), "fig", "图题", line_no)
+        if local_id:
+            self._add_anchor("fig", local_id, line_no)
+        title = match.group(2).strip()
+        if _VISIBLE_FIGURE_LABEL_RE.match(title):
+            self._issue(
+                "MANUAL_FIGURE_NUMBER",
+                "error",
+                line_no,
+                "图题中疑似手写了图号。",
+                "图题只写纯标题，例如 `{图：#fig:flow} 流程图`。",
+            )
+
     def _check_images(self, line_no: int, line: str):
         for match in _IMAGE_RE.finditer(line):
             alt = match.group(1).strip()
             anchors = list(_ANCHOR_RE.finditer(alt))
+            if line_no in self.subfigure_image_lines:
+                if anchors:
+                    self._issue(
+                        "SUBFIGURE_IMAGE_ANCHOR",
+                        "warning",
+                        line_no,
+                        "分图图片通常不单独设置 `#fig:id` 锚点。",
+                        "组合图的交叉引用锚点应写在父图题 `{图：#fig:id} 图题` 中。",
+                    )
+                continue
             if not anchors:
                 self._issue(
                     "FIGURE_MISSING_ANCHOR",
@@ -438,7 +850,7 @@ class _Auditor:
                 "warning",
                 line_no,
                 "列项细分疑似超过两个层次。",
-                "GB/T 1.1-2020 规定列项细分不宜超过两个层次。",
+                "GB/T 1.1—2020 规定列项细分不宜超过两个层次。",
             )
 
     def _check_untyped_anchors(self, line_no: int, line: str):
@@ -636,6 +1048,66 @@ class _Auditor:
 
     def _strip_list_marker(self, line: str) -> str:
         return _LIST_ITEM_RE.sub("", line, count=1)
+
+    def _line_has_modal_verb(self, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("| ---") or stripped.startswith("```"):
+            return False
+        stripped = _REF_RE.sub("", stripped)
+        stripped = _ANCHOR_RE.sub("", stripped)
+        return bool(_MODAL_VERB_RE.search(stripped))
+
+    def _keyword_initial(self, keyword: str) -> str:
+        keyword = re.sub(r"[`*_《》“”\"'（）()]", "", keyword).strip()
+        for char in keyword:
+            if char.isascii() and char.isalpha():
+                return char.upper()
+            initial = self._hanzi_initial(char)
+            if initial:
+                return initial
+        return ""
+
+    def _hanzi_initial(self, char: str) -> str:
+        try:
+            encoded = char.encode("gb2312")
+        except UnicodeEncodeError:
+            return ""
+        if len(encoded) < 2:
+            return ""
+        code = encoded[0] * 256 + encoded[1] - 65536
+        for start, end, initial in _PINYIN_INITIAL_RANGES:
+            if start <= code <= end:
+                return initial
+        return ""
+
+    def _normative_ref_sort_key(self, code: str) -> tuple[object, ...]:
+        code = code.replace("–", "—")
+        code = re.sub(r"\s*[—-]\s*\d{4}(?:\.\d+)?$", "", code)
+        match = _STANDARD_CODE_RE.match(code)
+        if not match:
+            return (99, code)
+        prefix = match.group(1)
+        sequence = self._number_tuple(match.group(2))
+        category = self._standard_category(prefix)
+        if category in (1, 5):
+            return (category, sequence, prefix)
+        return (category, prefix, sequence)
+
+    def _standard_category(self, prefix: str) -> int:
+        if prefix in {"GB", "GB/T", "GB/Z"}:
+            return 1
+        if prefix.startswith("DB"):
+            return 3
+        if prefix.startswith("T/"):
+            return 4
+        if prefix in {"ISO", "ISO/IEC", "IEC"}:
+            return 5
+        if "/" in prefix or prefix.isalpha():
+            return 2
+        return 6
+
+    def _number_tuple(self, text: str) -> tuple[int, ...]:
+        return tuple(int(part) for part in text.split(".") if part.isdigit())
 
 
 def issue_dicts(issues: Iterable[Issue]) -> list[dict[str, object]]:
