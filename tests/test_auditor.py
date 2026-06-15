@@ -179,6 +179,18 @@ title: 测试
         self.assertIn("DUPLICATE_ADDON", codes)
         self.assertIn("FIGURE_ADDON_WITHOUT_FIGURE", codes)
 
+    def test_rejects_untitled_clause_in_foundational_sections(self):
+        cases = {
+            "范围": "# 范围\n\n{无标题条:2} 本文件规定了测试要求。\n",
+            "规范性引用文件": "# 规范性引用文件\n\n{无标题条:2} GB/T 1.1  标准化工作导则\n",
+            "术语和定义": "# 术语和定义\n\n{无标题条:2} 测试术语。\n",
+            "符号和缩略语": "# 符号和缩略语\n\n{无标题条:2} A 为面积。\n",
+        }
+        for chapter, text in cases.items():
+            with self.subTest(chapter=chapter):
+                issues = audit_text(text).issues
+                self.assertIn("UNTITLED_CLAUSE_IN_FOUNDATIONAL_SECTION", {issue.code for issue in issues})
+
     def test_validates_unknown_refs_duplicate_anchors_and_std_refs(self):
         text = """---
 title: 测试

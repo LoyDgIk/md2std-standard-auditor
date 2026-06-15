@@ -129,6 +129,7 @@ _NORMATIVE_REF_LEAD = (
 )
 _NORMATIVE_REF_NONE = "本文件没有规范性引用文件"
 _FORBIDDEN_APPENDIX_HEADINGS = {"范围", "规范性引用文件", "术语和定义"}
+_FOUNDATIONAL_UNTITLED_CHAPTERS = {"范围", "规范性引用文件", "术语和定义", "符号和缩略语"}
 
 _ALLOWED_REF_TYPES = {"tbl", "fig", "eq", "std"}
 _ALLOWED_REF_MODES = {"num", "label", "full"}
@@ -442,6 +443,7 @@ class _Auditor:
         in_example_block = False
         subfigure_group_open = False
         subfigure_count = 0
+        current_chapter = ""
 
         def reset_target():
             nonlocal last_target, target_addons, pending_table_caption, subfigure_group_open, subfigure_count
@@ -454,6 +456,15 @@ class _Auditor:
         for line_no, line in enumerate(self.lines, start=1):
             stripped = line.strip()
             if not stripped:
+                continue
+
+            heading = _HEADING_RE.match(line)
+            if heading and len(heading.group(1)) == 1:
+                current_chapter = heading.group(2).strip()
+                reset_target()
+                in_html_table = False
+                subfigure_group_open = False
+                subfigure_count = 0
                 continue
 
             for pattern, message, hint in _REMOVED_MARKERS:
@@ -484,6 +495,18 @@ class _Auditor:
                     line_no,
                     "无标题条语法不符合 md2std 契约。",
                     "写成 `{无标题条:2} 正文`、`{无标题条:3} 正文` 或 `{无标题条:4} 正文`。",
+                )
+                reset_target()
+                continue
+
+            if _UNTITLED_CLAUSE_RE.match(line) and current_chapter in _FOUNDATIONAL_UNTITLED_CHAPTERS:
+                self._issue(
+                    "UNTITLED_CLAUSE_IN_FOUNDATIONAL_SECTION",
+                    "error",
+                    line_no,
+                    "`# %s` 章内不应使用 `{无标题条:n}`。" % current_chapter,
+                    "范围、规范性引用文件、术语和定义、符号和缩略语内直接写普通段落；"
+                    "无标题条只用于术语和定义之后的技术章或附录。",
                 )
                 reset_target()
                 continue
