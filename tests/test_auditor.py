@@ -28,6 +28,8 @@ GB/T 11615  地热资源地质勘查规范
 
 # 术语和定义
 
+下列术语和定义适用于本文件。
+
 ## 地热温泉  geothermal hot spring
 
 定义内容。
@@ -66,6 +68,8 @@ title: 测试
 见{{fig:subparts:label}}和{{tbl:sample:label}}。
 
 # 术语和定义
+
+下列术语和定义适用于本文件。
 
 {术语：地热温泉 | geothermal hot spring}
 
@@ -190,6 +194,126 @@ title: 测试
             with self.subTest(chapter=chapter):
                 issues = audit_text(text).issues
                 self.assertIn("UNTITLED_CLAUSE_IN_FOUNDATIONAL_SECTION", {issue.code for issue in issues})
+
+    def test_checks_normative_reference_default_lead_infos(self):
+        missing_lead = """---
+title: 测试
+---
+# 规范性引用文件
+
+GB/T 11615  地热资源地质勘查规范
+"""
+        empty = """---
+title: 测试
+---
+# 规范性引用文件
+"""
+        conflict = """---
+title: 测试
+---
+# 规范性引用文件
+
+本文件没有规范性引用文件。
+
+GB/T 11615  地热资源地质勘查规范
+"""
+
+        missing_issues = audit_text(missing_lead).issues
+        self.assertIn("NORMATIVE_REFERENCES_DEFAULT_LEAD_INFO", {issue.code for issue in missing_issues})
+        self.assertEqual(
+            "info",
+            next(issue.severity for issue in missing_issues
+                 if issue.code == "NORMATIVE_REFERENCES_DEFAULT_LEAD_INFO"),
+        )
+        self.assertIn("NORMATIVE_REFERENCES_NONE_INFO", self.codes(empty))
+
+        conflict_codes = self.codes(conflict)
+        self.assertIn("NORMATIVE_REFERENCES_CONFLICT", conflict_codes)
+        self.assertNotIn("NORMATIVE_REFERENCES_DEFAULT_LEAD_INFO", conflict_codes)
+
+    def test_checks_terms_fixed_lead(self):
+        generated_lead = """---
+title: 测试
+---
+# 术语和定义
+
+## 地热温泉  geothermal hot spring
+
+定义内容。
+"""
+        conflict = """---
+title: 测试
+---
+# 术语和定义
+
+本文件没有需要界定的术语和定义。
+
+{术语：地热温泉 | geothermal hot spring}
+
+定义内容。
+"""
+        empty = """---
+title: 测试
+---
+# 术语和定义
+"""
+        lead_without_terms = """---
+title: 测试
+---
+# 术语和定义
+
+下列术语和定义适用于本文件。
+"""
+        imported_only = """---
+title: 测试
+---
+# 术语和定义
+
+GB/T 11615界定的术语和定义适用于本文件。
+"""
+
+        self.assertNotIn("TERMS_LEAD_MISSING", self.codes(generated_lead))
+        self.assertIn("TERMS_DEFAULT_LEAD_INFO", self.codes(generated_lead))
+        self.assertIn("TERMS_SECTION_CONFLICT", self.codes(conflict))
+        self.assertNotIn("TERMS_SECTION_EMPTY", self.codes(empty))
+        self.assertIn("TERMS_LEAD_WITHOUT_TERMS", self.codes(lead_without_terms))
+        self.assertNotIn("TERMS_SECTION_EMPTY", self.codes(imported_only))
+
+    def test_checks_symbols_fixed_lead(self):
+        generated_lead = """---
+title: 测试
+---
+# 符号和缩略语
+
+A —— 面积。
+"""
+        empty = """---
+title: 测试
+---
+# 符号和缩略语
+
+下列符号适用于本文件。
+"""
+        valid = """---
+title: 测试
+---
+# 符号和缩略语
+
+下列符号和缩略语适用于本文件。
+
+A —— 面积。
+"""
+
+        self.assertNotIn("SYMBOLS_LEAD_MISSING", self.codes(generated_lead))
+        self.assertIn("SYMBOLS_SECTION_EMPTY", self.codes(empty))
+        self.assertNotIn("SYMBOLS_LEAD_MISSING", self.codes(valid))
+
+    def test_checks_manual_drafting_basis_text(self):
+        abbreviated = "本文件按照 GB/T 1.1—2020 起草。"
+        expected = "本文件按照GB/T 1.1—2020《标准化工作导则　第1部分：标准化文件的结构和起草规则》的规定起草。"
+
+        self.assertIn("PREFACE_DRAFTING_BASIS_TEXT", self.codes(abbreviated))
+        self.assertNotIn("PREFACE_DRAFTING_BASIS_TEXT", self.codes(expected))
 
     def test_validates_unknown_refs_duplicate_anchors_and_std_refs(self):
         text = """---

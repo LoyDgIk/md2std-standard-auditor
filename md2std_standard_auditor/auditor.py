@@ -128,6 +128,20 @@ _NORMATIVE_REF_LEAD = (
     "不注日期的引用文件，其最新版本"
 )
 _NORMATIVE_REF_NONE = "本文件没有规范性引用文件"
+_TERMS_NONE = "本文件没有需要界定的术语和定义"
+_TERMS_LOCAL_LEAD = "下列术语和定义适用于本文件"
+_TERMS_IMPORTED_LEAD_RE = re.compile(r"界定的术语和定义适用于本文件")
+_TERMS_IMPORTED_AND_LOCAL_LEAD_RE = re.compile(r"界定的以及下列术语和定义适用于本文件")
+_SYMBOLS_LEADS = (
+    "下列符号适用于本文件",
+    "下列缩略语适用于本文件",
+    "下列符号和缩略语适用于本文件",
+)
+_DRAFTING_BASIS_EXPECTED = (
+    "本文件按照GB/T 1.1—2020《标准化工作导则　第1部分："
+    "标准化文件的结构和起草规则》的规定起草。"
+)
+_DRAFTING_BASIS_RE = re.compile(r"^\s*(?:-\s*)?本文件.*GB/T\s*1\.1.*起草")
 _FORBIDDEN_APPENDIX_HEADINGS = {"范围", "规范性引用文件", "术语和定义"}
 _FOUNDATIONAL_UNTITLED_CHAPTERS = {"范围", "规范性引用文件", "术语和定义", "符号和缩略语"}
 
@@ -163,6 +177,8 @@ class _Auditor:
         self._check_document_structure()
         self._check_normative_reference_section()
         self._check_normative_reference_order()
+        self._check_terms_section()
+        self._check_symbols_section()
         self._check_reference_section()
         self._check_index_section()
         self._check_informative_appendix_modal_verbs()
@@ -273,30 +289,14 @@ class _Auditor:
                     )
 
     def _check_normative_reference_section(self):
-        section = self._section_lines("规范性引用文件")
-        if not section:
+        if not self._has_top_section("规范性引用文件"):
             return
+        section = self._section_lines("规范性引用文件")
         non_empty = [(line_no, line.strip()) for line_no, line in section if line.strip()]
         has_none_text = any(_NORMATIVE_REF_NONE in line for _, line in non_empty)
         has_entries = any(_NORMATIVE_REF_RE.match(self._strip_list_marker(line)) for _, line in non_empty)
         has_lead = any(_NORMATIVE_REF_LEAD in line for _, line in non_empty)
 
-        if has_entries and not has_lead:
-            self._issue(
-                "NORMATIVE_REFERENCES_LEAD_MISSING",
-                "warning",
-                non_empty[0][0] if non_empty else 1,
-                "规范性引用文件章有清单条目，但缺少 GB/T 1.1—2020 固定导语。",
-                "在清单前加入“下列文件中的内容通过文中的规范性引用而构成本文件必不可少的条款……”导语。",
-            )
-        if not has_entries and not has_none_text:
-            self._issue(
-                "NORMATIVE_REFERENCES_EMPTY",
-                "warning",
-                non_empty[0][0] if non_empty else self._heading_line("规范性引用文件"),
-                "规范性引用文件章既没有清单条目，也没有“本文件没有规范性引用文件。”说明。",
-                "补充引用文件清单，或写明“本文件没有规范性引用文件。”。",
-            )
         if has_entries and has_none_text:
             self._issue(
                 "NORMATIVE_REFERENCES_CONFLICT",
@@ -304,6 +304,22 @@ class _Auditor:
                 non_empty[0][0],
                 "规范性引用文件章同时包含“无引用”说明和引用文件清单。",
                 "二者只能保留一种。",
+            )
+        if has_entries and not has_none_text and not has_lead:
+            self._issue(
+                "NORMATIVE_REFERENCES_DEFAULT_LEAD_INFO",
+                "info",
+                non_empty[0][0] if non_empty else 1,
+                "规范性引用文件章有清单条目但未手写固定导语，生成器将使用默认导语。",
+                "如需手写，应使用 GB/T 1.1 固定导语，不要自行改写。",
+            )
+        if not has_entries and not has_none_text:
+            self._issue(
+                "NORMATIVE_REFERENCES_NONE_INFO",
+                "info",
+                non_empty[0][0] if non_empty else self._heading_line("规范性引用文件"),
+                "规范性引用文件章没有清单条目，生成器将使用“本文件没有规范性引用文件。”。",
+                "如实际存在规范性引用文件，请补充引用文件清单。",
             )
 
         for line_no, line in section:
@@ -350,6 +366,68 @@ class _Auditor:
                 % actual[2],
             )
             break
+
+    def _check_terms_section(self):
+        if not self._has_top_section("术语和定义"):
+            return
+        section = self._section_lines("术语和定义")
+        non_empty = [(line_no, line.strip()) for line_no, line in section if line.strip()]
+        has_entries = any(self._is_term_entry_line(line) for _, line in non_empty)
+        has_none_text = any(_TERMS_NONE in line for _, line in non_empty)
+        has_local_lead = any(_TERMS_LOCAL_LEAD in line for _, line in non_empty)
+        has_imported_lead = any(_TERMS_IMPORTED_LEAD_RE.search(line) for _, line in non_empty)
+        has_imported_and_local_lead = any(
+            _TERMS_IMPORTED_AND_LOCAL_LEAD_RE.search(line) for _, line in non_empty
+        )
+
+        if has_entries and has_none_text:
+            self._issue(
+                "TERMS_SECTION_CONFLICT",
+                "error",
+                non_empty[0][0],
+                "术语和定义章同时包含“无术语”说明和术语条目。",
+                "二者只能保留一种；有术语条目时删除“本文件没有需要界定的术语和定义。”。",
+            )
+            return
+        if has_entries and not (has_local_lead or has_imported_lead or has_imported_and_local_lead):
+            line_no = next((ln for ln, line in non_empty if self._is_term_entry_line(line)), non_empty[0][0])
+            self._issue(
+                "TERMS_DEFAULT_LEAD_INFO",
+                "info",
+                line_no,
+                "术语和定义章未手写导语，生成器将使用默认导语。",
+                "若同时引用外部术语，手动使用“……界定的以及下列术语和定义适用于本文件。”。",
+            )
+        if not has_entries and has_local_lead:
+            line_no = next((ln for ln, line in non_empty if _TERMS_LOCAL_LEAD in line), non_empty[0][0])
+            self._issue(
+                "TERMS_LEAD_WITHOUT_TERMS",
+                "warning",
+                line_no,
+                "术语和定义章写了“下列术语和定义适用于本文件”，但未列出术语条目。",
+                "补充术语条目；如无术语，改为“本文件没有需要界定的术语和定义。”。",
+            )
+
+    def _check_symbols_section(self):
+        if not self._has_top_section("符号和缩略语"):
+            return
+        section = self._section_lines("符号和缩略语")
+        non_empty = [(line_no, line.strip()) for line_no, line in section if line.strip()]
+        content_lines = [
+            (line_no, line)
+            for line_no, line in non_empty
+            if not _HEADING_RE.match(line) and not self._starts_with_any(line, _SYMBOLS_LEADS)
+        ]
+
+        if not content_lines:
+            self._issue(
+                "SYMBOLS_SECTION_EMPTY",
+                "warning",
+                non_empty[0][0] if non_empty else self._heading_line("符号和缩略语"),
+                "符号和缩略语章为空或只有导语。",
+                "补充符号/缩略语说明；如没有必要，可删除该章。",
+            )
+            return
 
     def _check_reference_section(self):
         section = self._section_lines("参考文献")
@@ -679,7 +757,21 @@ class _Auditor:
                     "改用 `{{tbl:id}}`、`{{fig:id}}`、`{{eq:id}}` 或 `{{std:标准号}}`。",
                 )
             self._check_standard_year_separator(line_no, line)
+            self._check_drafting_basis_text(line_no, line)
             self._check_note_modal_verb(line_no, line)
+
+    def _check_drafting_basis_text(self, line_no: int, line: str):
+        if not _DRAFTING_BASIS_RE.match(line):
+            return
+        if self._compact_text(line.lstrip("- ")) == self._compact_text(_DRAFTING_BASIS_EXPECTED):
+            return
+        self._issue(
+            "PREFACE_DRAFTING_BASIS_TEXT",
+            "warning",
+            line_no,
+            "GB/T 1.1 起草依据语句疑似不是规范固定表述。",
+            "md2std 会自动生成前言首句；如需手写，应使用“%s”。" % _DRAFTING_BASIS_EXPECTED,
+        )
 
     def _check_standard_year_separator(self, line_no: int, line: str):
         for match in _STANDARD_YEAR_HYPHEN_RE.finditer(line):
@@ -1029,6 +1121,9 @@ class _Auditor:
                 return line_no
         return 1
 
+    def _has_top_section(self, title: str) -> bool:
+        return any(level == 1 and heading_title == title for _, level, heading_title in self.heading_entries)
+
     def _section_lines(self, title: str) -> list[tuple[int, str]]:
         start_index = None
         for idx, (line_no, level, heading_title) in enumerate(self.heading_entries):
@@ -1071,6 +1166,18 @@ class _Auditor:
 
     def _strip_list_marker(self, line: str) -> str:
         return _LIST_ITEM_RE.sub("", line, count=1)
+
+    def _starts_with_any(self, text: str, prefixes: Iterable[str]) -> bool:
+        stripped = (text or "").strip()
+        return any(stripped.startswith(prefix) for prefix in prefixes)
+
+    def _is_term_entry_line(self, line: str) -> bool:
+        stripped = (line or "").strip()
+        heading = _HEADING_RE.match(stripped)
+        return bool(_TERM_MARKER_RE.match(stripped) or (heading and len(heading.group(1)) == 2))
+
+    def _compact_text(self, text: str) -> str:
+        return re.sub(r"\s+", "", text or "")
 
     def _line_has_modal_verb(self, line: str) -> bool:
         stripped = line.strip()
