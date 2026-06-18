@@ -24,7 +24,7 @@ title: 测试标准
 
 下列文件中的内容通过文中的规范性引用而构成本文件必不可少的条款。其中，注日期的引用文件，仅该日期对应的版本适用于本文件；不注日期的引用文件，其最新版本（包括所有的修改单）适用于本文件。
 
-GB/T 11615  地热资源地质勘查规范
+{{std:GB/T 11615}} GB/T 11615  地热资源地质勘查规范
 
 # 术语和定义
 
@@ -58,6 +58,45 @@ class AuditorTest(unittest.TestCase):
 
     def test_valid_document_has_no_issues(self):
         self.assertEqual([], audit_text(VALID_DOC).issues)
+
+    def test_normative_reference_registration_supports_aliases_and_foreign_years(self):
+        text = """---
+title: 测试
+---
+# 范围
+
+符合{{std:GB/T 1.1}}、{{std:JIS S 6006}}、{{std:ISO 3160-2}}和{{std:EN 71—3:2019}}。
+
+# 规范性引用文件
+
+{{std:GB/T 1.1—2020}} GB/T 1.1—2020  标准化工作导则
+
+{{std:JIS S 6006:2007}} JIS S 6006:2007  铅笔、彩色铅笔及其笔芯
+
+{{std:ISO 3160-2:2015}} ISO 3160-2:2015  表壳体及其附件 金合金覆盖层 第2部分:纯度、厚度、耐腐蚀性能和附着力的测试
+
+{{std:EN 71—3}} EN 71—3:2019  玩具安全 第3部分:特定元素的迁移
+"""
+        codes = self.codes(text)
+        self.assertNotIn("INVALID_STANDARD_REFERENCE", codes)
+        self.assertNotIn("UNKNOWN_STANDARD_REFERENCE", codes)
+
+    def test_implicit_normative_reference_registration_warns_but_matches(self):
+        text = """---
+title: 测试
+---
+# 范围
+
+符合{{std:GB/T 11615}}。
+
+# 规范性引用文件
+
+GB/T 11615  地热资源地质勘查规范
+"""
+        issues = audit_text(text).issues
+        codes = {issue.code for issue in issues}
+        self.assertIn("NORMATIVE_REFERENCE_IMPLICIT_REGISTRATION", codes)
+        self.assertNotIn("UNKNOWN_STANDARD_REFERENCE", codes)
 
     def test_current_md2std_standard_markdown_contract_is_accepted(self):
         text = """---
@@ -201,7 +240,7 @@ title: 测试
 ---
 # 规范性引用文件
 
-GB/T 11615  地热资源地质勘查规范
+{{std:GB/T 11615}} GB/T 11615  地热资源地质勘查规范
 """
         empty = """---
 title: 测试
@@ -215,7 +254,7 @@ title: 测试
 
 本文件没有规范性引用文件。
 
-GB/T 11615  地热资源地质勘查规范
+{{std:GB/T 11615}} GB/T 11615  地热资源地质勘查规范
 """
 
         missing_issues = audit_text(missing_lead).issues
@@ -442,9 +481,9 @@ title: 测试
 
 下列文件中的内容通过文中的规范性引用而构成本文件必不可少的条款。其中，注日期的引用文件，仅该日期对应的版本适用于本文件；不注日期的引用文件，其最新版本（包括所有的修改单）适用于本文件。
 
-DZ/T 0481  水热型地热资源回灌技术要求
+{{std:DZ/T 0481}} DZ/T 0481  水热型地热资源回灌技术要求
 
-GB/T 11615  地热资源地质勘查规范
+{{std:GB/T 11615}} GB/T 11615  地热资源地质勘查规范
 """
         codes = self.codes(text)
         self.assertIn("STANDARD_YEAR_SEPARATOR", codes)

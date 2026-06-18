@@ -8,6 +8,12 @@ import re
 from pathlib import Path
 from typing import Iterable
 
+from .normative_refs import (
+    normalize_standard_id,
+    parse_implicit_ref_entry,
+    parse_ref_registration,
+    standard_aliases,
+)
 
 SEVERITY_ORDER = {"info": 0, "warning": 1, "error": 2}
 
@@ -55,7 +61,6 @@ _INLINE_DISPLAY_FORMULA_RE = re.compile(r"\$\$(.+?)\$\$\s*(?:\{#([^}]+)\})?")
 _FORMULA_TAG_RE = re.compile(r"\\tag\s*\{?")
 _VISIBLE_TABLE_LABEL_RE = re.compile(r"^表\s*(?:[A-ZＡ-Ｚ]\s*[.．]\s*)?\d+(?:[.．]\d+)?(?:\s|　|$)")
 _VISIBLE_FIGURE_LABEL_RE = re.compile(r"^图\s*(?:[A-ZＡ-Ｚ]\s*[.．]\s*)?\d+(?:[.．]\d+)?(?:\s|　|$)")
-_NORMATIVE_REF_RE = re.compile(r"^\s*([A-Z][A-Z0-9/]*\s+\d[\w.\-—–]*)(?:\s{2,}|　+)(.+)$")
 _LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-+*]|\d+[.)])\s+")
 _REFERENCE_ITEM_RE = re.compile(r"^\s*[\[［]\d+[\]］]")
 _STANDARD_YEAR_HYPHEN_RE = re.compile(
@@ -167,6 +172,7 @@ class _Auditor:
         self.issues: list[Issue] = []
         self.anchors: dict[tuple[str, str], int] = {}
         self.normative_refs: set[str] = set()
+        self.normative_ref_entries: list[tuple[int, str]] = []
         self.heading_entries: list[tuple[int, int, str]] = []
         self.subfigure_image_lines: set[int] = set()
 
@@ -210,9 +216,27 @@ class _Auditor:
                 continue
             if not in_normrefs:
                 continue
-            match = _NORMATIVE_REF_RE.match(self._strip_list_marker(line))
-            if match:
-                self.normative_refs.add(match.group(1).strip())
+            entry = self._parse_normative_ref_line(line)
+            if entry is None:
+                continue
+            if not entry.explicit:
+                self._issue(
+                    "NORMATIVE_REFERENCE_IMPLICIT_REGISTRATION",
+                    "warning",
+                    line_no,
+                    "规范性引用文件条目使用了旧版自动识别：%s。" % entry.code,
+                    "推荐改为行首显式注册，例如 `{{std:%s}} %s`。" % (entry.target, entry.content),
+                )
+            self.normative_ref_entries.append((line_no, entry.code))
+            for alias in standard_aliases(entry.target, entry.code):
+                self.normative_refs.add(alias)
+
+    def _parse_normative_ref_line(self, line: str):
+        text = self._strip_list_marker(line).strip()
+        entry = parse_ref_registration(text)
+        if entry is not None:
+            return entry
+        return parse_implicit_ref_entry(text)
 
     def _collect_headings(self):
         for line_no, line in enumerate(self.lines, start=1):
@@ -294,7 +318,7 @@ class _Auditor:
         section = self._section_lines("规范性引用文件")
         non_empty = [(line_no, line.strip()) for line_no, line in section if line.strip()]
         has_none_text = any(_NORMATIVE_REF_NONE in line for _, line in non_empty)
-        has_entries = any(_NORMATIVE_REF_RE.match(self._strip_list_marker(line)) for _, line in non_empty)
+        has_entries = any(self._parse_normative_ref_line(line) is not None for _, line in non_empty)
         has_lead = any(_NORMATIVE_REF_LEAD in line for _, line in non_empty)
 
         if has_entries and has_none_text:
@@ -348,10 +372,10 @@ class _Auditor:
         section = self._section_lines("规范性引用文件")
         entries: list[tuple[tuple[object, ...], int, str]] = []
         for line_no, line in section:
-            match = _NORMATIVE_REF_RE.match(self._strip_list_marker(line))
-            if not match:
+            entry = self._parse_normative_ref_line(line)
+            if entry is None:
                 continue
-            code = match.group(1).strip()
+            code = entry.code
             entries.append((self._normative_ref_sort_key(code), line_no, code))
         expected = sorted(entries, key=lambda item: item[0])
         for actual, wanted in zip(entries, expected):
@@ -987,7 +1011,11 @@ class _Auditor:
         self._check_broken_reference_braces()
 
     def _check_reference(self, line_no: int, raw: str, token: str):
-        parts = [part.strip() for part in raw.split(":")]
+        if ":" in raw:
+            first, rest = raw.split(":", 1)
+            parts = [first.strip(), rest.strip()]
+        else:
+            parts = [raw.strip()]
         ref_type = parts[0] if parts else ""
         if ref_type not in _ALLOWED_REF_TYPES:
             self._issue(
@@ -1008,7 +1036,7 @@ class _Auditor:
                     "写成 `{{std:GB/T 11615}}`，并确保标准号在“规范性引用文件”章中列出。",
                 )
                 return
-            target = parts[1]
+            target = normalize_standard_id(parts[1])
             if target not in self.normative_refs:
                 self._issue(
                     "UNKNOWN_STANDARD_REFERENCE",
@@ -1018,6 +1046,7 @@ class _Auditor:
                     "补充对应清单条目，或修正 `{{std:...}}` 中的标准号文本。",
                 )
             return
+        parts = [part.strip() for part in raw.split(":")]
         if len(parts) not in (2, 3) or not parts[1]:
             self._issue(
                 "INVALID_REFERENCE",
